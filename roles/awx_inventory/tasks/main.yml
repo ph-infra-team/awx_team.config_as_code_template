@@ -1,0 +1,31 @@
+---
+# tasks file for awx_inventory
+- name: "Validate inventory definitions"
+  assert:
+    that:
+      - inventory_item.name is defined
+      - inventory_item.organization is defined
+    fail_msg: "Inventory item {{ inventory_item | to_nice_json }} is missing required keys ('name' and/or 'organization')."
+  loop: "{{ controller_inventories_all }}"
+  #loop: "{{ controller_inventories_all + lookup('vars', 'controller_inventories_' + env) }}"
+  loop_control:
+    loop_var: inventory_item
+  tags: 
+    - inventories
+    
+- name: Ensure all inventories are created
+  loop: "{{ controller_inventories_all }}"
+  # loop: "{{ controller_inventories_all | default([]) + lookup('vars', 'controller_inventories_' + env) | default([]) }}" # "{{ controller_inventories }}"
+  loop_control:
+    loop_var: inventory_item
+  tags: 
+    - inventories
+  awx.awx.inventory:
+    name: "{{ inventory_item.name }}"
+    organization: "{{ inventory_item.organization }}"
+    description: "{{ inventory_item.description | default(omit) }}"
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+    state: present

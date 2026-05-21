@@ -1,0 +1,32 @@
+---
+# tasks file for awx_schedule
+- name: "Validate schedule definitions"
+  assert:
+    that:
+      - schedule_item.name is defined
+      - schedule_item.unified_job_template is defined
+      - schedule_item.rrule is defined
+    fail_msg: "Schedule item {{ schedule_item | to_nice_json }} is missing required fields (name, unified_job_template, rrule)."
+  loop: "{{ controller_schedules_all }}"
+  #loop: "{{ controller_schedules_all + lookup('vars', 'controller_schedules_' + env) }}"
+  loop_control:
+    loop_var: schedule_item
+  tags: 
+    - schedules
+    
+- name: Create schedule for inventory sources
+  loop: "{{ controller_schedules_all }}"
+  #loop: "{{ controller_schedules_all | default([]) + lookup('vars', 'controller_schedules_' + env) | default([]) }}"
+  loop_control:
+    loop_var: schedule_item
+  awx.awx.schedule:
+    name: "{{ schedule_item.name }}"
+    description: "{{ schedule_item.description | default(omit) }}"
+    unified_job_template: "{{ schedule_item.unified_job_template }}"
+    rrule: "{{ schedule_item.rrule }}"
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+  tags: 
+    - schedules

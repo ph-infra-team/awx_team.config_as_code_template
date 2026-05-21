@@ -1,0 +1,90 @@
+---
+# Example playbook demonstrating collection use
+- name: Configure AWX Resources for organizations teams
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  become: false
+
+  collections:
+    - awx.awx # for AWX. if AAP ansible.controller
+    - awx_team.config_as_code_template # custom collection dependency on awx.awx (custom collection in gitlab.example.com)
+
+  pre_tasks:
+    - name: Load team config
+      ansible.builtin.include_vars:
+        file: team_vars.yml #give path if not in same directory
+      tags: always
+    
+    - name: Load environment-specific vault
+      ansible.builtin.include_vars:
+        file: "vaults/{{ env }}.yml" #give path if not in same directory
+      tags: always
+    
+    - name: Install required collections
+      ansible.builtin.command:
+        cmd: ansible-galaxy collection install -r collections/requirements.yml --force
+      changed_when: false
+      tags: always
+
+  tasks:
+    - block:
+        - name: Setup notification templates
+          ansible.builtin.import_role:
+            name: awx_notification_template
+          # tags: notifications   <-- not required, since role tasks are already tagged
+            
+        - name: Setup credentials
+          ansible.builtin.import_role:
+            name: awx_credential
+          # tags: credentials   <-- not required, since role tasks are already tagged
+
+        - name: Setup projects
+          ansible.builtin.import_role:
+            name: awx_project
+          # tags: projects   <-- not required, since role tasks are already tagged
+
+        - name: Setup inventories
+          ansible.builtin.import_role:
+            name: awx_inventory
+          # tags: inventories   <-- not required, since role tasks are already tagged
+
+        - name: Setup inventory sources
+          ansible.builtin.import_role:
+            name: awx_inventory_source
+          # tags: inventory_sources   <-- not required, since role tasks are already tagged
+
+        - name: Setup schedules
+          ansible.builtin.import_role:
+            name: awx_schedule
+          # tags: schedules   <-- not required, since role tasks are already tagged
+
+        - name: Setup job templates
+          ansible.builtin.import_role:
+            name: awx_job_template
+          # tags: job_templates   <-- not required, since role tasks are already tagged
+
+        - name: Setup workflow job templates
+          ansible.builtin.import_role:
+            name: awx_workflow_job_templates
+          # tags: workflow_job_templates   <-- not required, since role tasks are already tagged
+
+# Note: In case of failure of any of the above tasks in block, the rescue section will be executed.
+# we can create a job template manually in AAP to run this setup_awx.yml and 
+# then we can setup a notification template manually in AAP to alert on setup_awx.yml playbook failure instead of using mail module here(block and rescue)
+      rescue:
+        - name: "Send email notification when setup_awx.yml fails"
+          ansible.builtin.mail:
+            host: "smtp.gmail.com"
+            port: 587
+            username: "{{ email_smtp_username }}"
+            password: "{{ email_smtp_password }}"
+            sender: "{{ email_smtp_sender }}"
+            recipients:
+              - "{{ email_smtp_recipient1 }}"
+              - "{{ email_smtp_recipient2 }}"
+            subject: "Setup Playbook FAILED"
+            body: |
+              The playbook `setup_awx.yml` failed while creating AAP resources.
+              Please check logs and AWX controller for details.
+            secure: starttls

@@ -1,0 +1,139 @@
+---
+# tasks file for awx_workflow_job_template
+# Validate workflow definitions
+- name: "Validate workflow job template definitions"
+  assert:
+    that:
+      - wft_item.name is defined
+      - wft_item.organization is defined
+      - wft_item.inventory is defined
+      - wft_item.nodes is defined
+    fail_msg: "Workflow template item {{ wft_item | to_nice_json }} missing required fields (name, organization, inventory, nodes)."
+  loop: "{{ controller_workflow_job_templates_all }}"
+  #loop: "{{ controller_workflow_job_templates_all + lookup('vars', 'controller_workflow_job_templates_' + env) }}"
+  loop_control:
+    loop_var: wft_item
+  tags: 
+    - workflow_job_templates
+
+# Create the workflow job template itself
+- name: "Create workflow job template"
+  loop: "{{ controller_workflow_job_templates_all }}"
+  #loop: "{{ controller_workflow_job_templates_all | default([]) + lookup('vars', 'controller_workflow_job_templates_' + env) | default([]) }}"
+  loop_control:
+    loop_var: wft_item
+  awx.awx.workflow_job_template:
+    name: "{{ wft_item.name }}"
+    description: "{{ wft_item.description | default(omit) }}"
+    inventory: "{{ wft_item.inventory }}"
+    organization: "{{ wft_item.organization }}"
+    ask_variables_on_launch: "{{ wft_item.ask_variables_on_launch | default(false) }}"
+    notification_templates_error: "{{ wft_item.notification_templates_error | default(omit) }}"
+    notification_templates_approvals: "{{ wft_item.notification_templates_approvals | default(omit) }}"
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+    state: present
+  register: result_wft
+  tags: 
+    - workflow_job_templates
+
+# Add workflow nodes
+- name: "Create workflow nodes without dependencies"
+  loop: "{{ controller_workflow_job_templates_all | subelements('nodes') }}"
+  loop_control:
+    label: "{{ item.0.name }} -> {{ item.1.identifier }}"
+  awx.awx.workflow_job_template_node:
+    workflow_job_template: "{{ item.0.name }}"
+    identifier: "{{ item.1.identifier }}"
+    unified_job_template: "{{ item.1.unified_job_template | default(omit) }}"
+    approval_node: "{{ item.1.approval_node | default(omit) }}"
+    all_parents_must_converge: "{{ item.1.all_parents_must_converge | default(omit) }}"
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+  tags: 
+    - workflow_job_template_nodes
+
+# Link workflow nodes dependencies (only if there are dependencies)
+- name: "Link workflow nodes dependencies"
+  loop: "{{ controller_workflow_job_templates_all | subelements('nodes') }}"
+  loop_control:
+    label: "{{ item.0.name }} -> {{ item.1.identifier }}"
+  when: >
+    (
+      item.1.success_nodes is defined and (item.1.success_nodes | length) > 0
+    )
+    or
+    (
+      item.1.failure_nodes is defined and (item.1.failure_nodes | length) > 0
+    )
+    or
+    (
+      item.1.always_nodes is defined and (item.1.always_nodes | length) > 0
+    )
+  awx.awx.workflow_job_template_node:
+    workflow_job_template: "{{ item.0.name }}"
+    identifier: "{{ item.1.identifier }}"
+    success_nodes: "{{ item.1.success_nodes | default([]) }}"
+    failure_nodes: "{{ item.1.failure_nodes | default([]) }}"
+    always_nodes: "{{ item.1.always_nodes | default([]) }}"
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+  tags: 
+    - workflow_job_template_nodes
+
+# # Add workflow nodes
+# - name: "Create workflow nodes without dependencies"
+#   loop: "{{ controller_workflow_job_templates_all | subelements('nodes') }}"
+#   loop_control:
+#     label: "{{ item.0.name }} -> {{ item.1.identifier }}"
+#   awx.awx.workflow_job_template_node:
+#     workflow_job_template: "{{ item.0.name }}"
+#     identifier: "{{ item.1.identifier }}"
+#     unified_job_template: "{{ item.1.unified_job_template }}"
+#     controller_host: "{{ CONTROLLER_HOST }}"
+#     controller_username: "{{ CONTROLLER_USERNAME }}"
+#     controller_password: "{{ CONTROLLER_PASSWORD }}"
+#     validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+
+# - name: "Link workflow nodes dependencies"
+#   loop: "{{ controller_workflow_job_templates_all | subelements('nodes') }}"
+#   loop_control:
+#     label: "{{ item.0.name }} -> {{ item.1.identifier }}"
+#   awx.awx.workflow_job_template_node:
+#     workflow_job_template: "{{ item.0.name }}"
+#     identifier: "{{ item.1.identifier }}"
+#     success_nodes: "{{ item.1.success_nodes | default([]) }}"
+#     failure_nodes: "{{ item.1.failure_nodes | default([]) }}"
+#     always_nodes: "{{ item.1.always_nodes | default([]) }}"
+#     controller_host: "{{ CONTROLLER_HOST }}"
+#     controller_username: "{{ CONTROLLER_USERNAME }}"
+#     controller_password: "{{ CONTROLLER_PASSWORD }}"
+#     validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+
+
+# - name: "Create workflow nodes"
+#   loop: "{{ wft_item.nodes }}"
+#   loop_control:
+#     loop_var: wft_node
+#   awx.awx.workflow_job_template_node:
+#     workflow_job_template: "{{ wft_item.name }}"
+#     identifier: "{{ wft_node.identifier }}"
+#     unified_job_template: "{{ wft_node.unified_job_template }}"
+#     success_nodes: "{{ wft_node.success_nodes | default([]) }}"
+#     failure_nodes: "{{ wft_node.failure_nodes | default([]) }}"
+#     always_nodes: "{{ wft_node.always_nodes | default([]) }}"
+#     controller_host: "{{ CONTROLLER_HOST }}"
+#     controller_username: "{{ CONTROLLER_USERNAME }}"
+#     controller_password: "{{ CONTROLLER_PASSWORD }}"
+#     validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+#   when: wft_item.nodes is defined
+#   loop: "{{ controller_workflow_job_templates_all | default([]) }}"
+#   #loop: "{{ controller_workflow_job_templates_all | default([]) + lookup('vars', 'controller_workflow_job_templates_' + env) | default([]) }}"
+#   loop_control:
+#     loop_var: wft_item

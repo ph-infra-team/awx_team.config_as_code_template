@@ -1,0 +1,53 @@
+---
+# tasks file for awx_job_template
+# 1) Validate each job_template definition
+- name: "Validate job template definitions"
+  assert:
+    that:
+      - template_item.name is defined
+      - template_item.project is defined
+      - template_item.playbook is defined
+      - template_item.inventory is defined
+      - template_item.execution_environment is defined
+    fail_msg: "Job template item {{ template_item | to_nice_json }} is missing required fields (name, project, playbook, inventory, execution_environment)."
+  loop: "{{ controller_job_templates_all }}"
+  #loop: "{{ controller_job_templates_all + lookup('vars', 'controller_job_templates_' + env) }}"
+  loop_control:
+    loop_var: template_item
+  tags: 
+    - job_templates
+
+- name: "Create job templates"
+  loop: "{{ controller_job_templates_all }}"
+  #loop: "{{ controller_job_templates_all | default([]) + lookup('vars', 'controller_job_templates_' + env) | default([]) }}"
+  loop_control:
+    loop_var: template_item
+  tags: 
+    - job_templates
+  awx.awx.job_template:
+    name: "{{ template_item.name }}"
+    description: "{{ template_item.description | default(omit) }}"
+    project: "{{ template_item.project }}"
+    job_type: "{{ template_item.job_type | default('run') }}"
+    playbook: "{{ template_item.playbook }}"
+    inventory: "{{ template_item.inventory }}"
+    execution_environment: "{{ template_item.execution_environment }}"
+    concurrent_jobs_enabled: "{{ template_item.concurrent_jobs_enabled | default(false) }}"
+    ask_variables_on_launch: "{{ template_item.ask_variables_on_launch | default(false) }}"
+    ask_inventory_on_launch: "{{ template_item.ask_inventory_on_launch | default(false) }}"
+    ask_scm_branch_on_launch: "{{ template_item.ask_scm_branch_on_launch | default(false) }}"
+    limit: "{{ template_item.limit | default(omit) }}"
+    verbosity: "{{ template_item.verbosity | default(omit) }}"
+    credentials: "{{ template_item.credentials | default(omit) }}"
+    labels: "{{ template_item.labels | default(omit) }}"
+    extra_vars: "{{ template_item.extra_vars | default(omit) }}"
+    forks: "{{ template_item.forks | default(omit) }}"
+    job_tags: "{{ template_item.job_tags | default(omit) }}"
+    skip_tags: "{{ template_item.skip_tags | default(omit) }}"
+    timeout: "{{ template_item.timeout | default(omit) }}"
+    controller_config_file: "{{ controller_config_file | default(omit) }}"
+    validate_certs: "{{ validate_certs | default(false) }}"
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"

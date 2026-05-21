@@ -1,0 +1,39 @@
+---
+# Validate each credential entry BEFORE calling awx.awx.credential
+- name: "Validate controller credential definitions"
+  assert:
+    that:
+      - controller_credential_item.name is defined
+      - controller_credential_item.organization is defined
+      - controller_credential_item.credential_type is defined
+      - controller_credential_item.inputs is defined
+    fail_msg: "Credential item {{ controller_credential_item | to_nice_json }} missing required values!"
+    success_msg: "Credential item {{ controller_credential_item.name }} is valid."
+  loop: "{{ controller_credentials_all }}"
+  loop_control:
+    loop_var: controller_credential_item
+  tags: 
+    - credentials
+
+# tasks file for create credentials
+- name: Ensure Credential under organization
+  loop: "{{ controller_credentials_all }}"
+  loop_control:
+    loop_var: controller_credential_item
+  when: controller_credentials_all is defined
+  tags: 
+    - credentials
+  awx.awx.credential: 
+    name: "{{ controller_credential_item.name }}"
+    credential_type: "{{ controller_credential_item.credential_type }}"
+    description: "{{ controller_credential_item.description | default(omit) }}"
+    organization: "{{ controller_credential_item.organization }}"
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+    inputs: "{{ controller_credential_item.inputs }}" #"{{ controller_credential_item.inputs | default({}) }}"
+    # inputs:
+    #   username: "{{ controller_credential_item.gitlab_username | default(gitlab_username) }}"
+    #   password: "{{ vars['gitlab_password_' + (controller_credential_item.name | lower)] | default(gitlab_password) }}" # "{{ lookup('vars', 'gitlab_password_' + __gateway_organization_item.name | lower) | default(gitlab_password) }}"
+...

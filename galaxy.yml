@@ -1,0 +1,11 @@
+namespace: awx_team
+name: config_as_code_template
+version: 1.0.0
+readme: README.md
+authors: 
+  - "AWX infra Team"
+description: "AAP/AWX awx_team.config_as_code_template for credentials, projects, inventories, sources, schedules, JTs, WJTs."
+license: MIT
+repository: "http://gitlab.midhtech.local/infra_team/awx_team.config_as_code_template.git"
+dependencies:
+  "awx.awx": ">=24.0.0"

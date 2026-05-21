@@ -1,0 +1,66 @@
+---
+# tasks file for awx_inventory_source
+#  Validate each inventory source definition BEFORE creation
+- name: "Validate inventory source definitions"
+  assert:
+    that:
+      - inventory_source_item.name is defined
+      - inventory_source_item.inventory is defined
+      - inventory_source_item.organization is defined
+      - inventory_source_item.source is defined
+      - inventory_source_item.source_project is defined
+      - inventory_source_item.source_path is defined
+      - inventory_source_item.credential is defined
+    fail_msg: "Inventory source item {{ inventory_source_item | to_nice_json }} is missing required fields."
+  loop: "{{ controller_inventory_sources_all }}"
+  #loop: "{{ controller_inventory_sources_all + lookup('vars', 'controller_inventory_sources_' + env) }}"
+  loop_control:
+    loop_var: inventory_source_item
+  tags: 
+    - inventory_sources
+
+
+- name: Ensure inventory sources for each inventory
+  loop: "{{ controller_inventory_sources_all }}"
+  #loop: "{{ controller_inventory_sources_all | default([]) + lookup('vars', 'controller_inventory_sources_' + env) | default([]) }}" # "{{ controller_inventory_sources }}"
+  loop_control:
+    loop_var: inventory_source_item
+  tags: 
+    - inventory_sources
+  awx.awx.inventory_source:
+    name: "{{ inventory_source_item.name }}"
+    inventory: "{{ inventory_source_item.inventory }}"
+    organization: "{{ inventory_source_item.organization }}"
+    source: "{{ inventory_source_item.source }}"
+    source_project: "{{ inventory_source_item.source_project }}"
+    source_path: "{{ inventory_source_item.source_path }}"
+    credential: "{{ inventory_source_item.credential }}"
+    overwrite: "{{ inventory_source_item.overwrite | default(true) }}"
+    overwrite_vars: "{{ inventory_source_item.overwrite_vars | default(true) }}"
+    update_cache_timeout: "{{ inventory_source_item.update_cache_timeout | default(0) }}"
+    # source_vars: {}
+    # source_regions: []
+    # source_script: null
+    # timeout: 0
+
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+    state: present
+
+# Trigger an immediate sync so hosts are fetched right away
+- name: Sync inventory sources after creation
+  loop: "{{ controller_inventory_sources_all }}"
+  #loop: "{{ controller_inventory_sources_all | default([]) + lookup('vars', 'controller_inventory_sources_' + env) | default([]) }}"
+  loop_control:
+    loop_var: inventory_source_item
+  awx.awx.inventory_source_update:
+    name: "{{ inventory_source_item.name }}"
+    inventory: "{{ inventory_source_item.inventory }}"
+    organization: "{{ inventory_source_item.organization }}"
+    wait: true # waits until sync completes
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"

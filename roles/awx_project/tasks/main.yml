@@ -1,0 +1,41 @@
+---
+# Validate project structure before looping
+- name: "Validate each project item has required keys"
+  assert:
+    that:
+      - project_item.scm_url is defined
+      - project_item.organization is defined
+      - (project_item.scm_url | length) > 0
+    fail_msg: "Project {{ project_item.name | default('unknown') }} is missing required scm_url or organization"
+  loop: "{{ controller_projects_all }}"
+  #loop: "{{ controller_projects_all + lookup('vars', 'controller_projects_' + env) }}"
+  loop_control:
+    loop_var: project_item
+  tags: 
+    - projects
+
+
+# tasks file for multiple projects for same organization
+- name: Ensure all defined projects under Organization
+  loop: "{{ controller_projects_all }}"
+  #loop: "{{ controller_projects_all | default([]) + lookup('vars', 'controller_projects_' + env) | default([]) }}"
+  loop_control:
+    loop_var: project_item
+  tags: 
+    - projects
+  awx.awx.project:
+    name: "{{ project_item.name | default(project_item.organization ~ ' Project') }}" # "{{ project_item.name }}"
+    organization: "{{ project_item.organization }}"
+    scm_type: "{{ project_item.scm_type | default('git') }}"
+    scm_url: "{{ project_item.scm_url }}"
+    scm_branch: "{{ project_item.scm_branch | default('main') }}"
+    scm_clean: true
+    scm_update_on_launch: true
+    scm_credential: "{{ project_item.credential | default(omit) }}"
+    update_project: "{{ project_item.update_project | default(true) }}"
+    wait: true
+    allow_override: true
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"

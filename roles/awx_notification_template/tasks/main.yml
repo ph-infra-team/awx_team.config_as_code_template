@@ -1,0 +1,35 @@
+---
+# Validate notification template structure before looping
+- name: "Validate each notification item has required keys"
+  assert:
+    that:
+      - notification_item.name is defined
+      - notification_item.type is defined
+      - notification_item.organization is defined
+      - notification_item.config is defined
+    fail_msg: "Notification {{ notification_item.name | default('unknown') }} is missing required keys (name, type, organization, config)"
+  loop: "{{ controller_notifications_all }}"
+  loop_control:
+    loop_var: notification_item
+  tags:
+    - notifications
+
+# Create/Update all notification templates
+- name: Ensure all defined notification templates under Organization
+  awx.awx.notification_template:
+    name: "{{ notification_item.name }}"
+    description: "{{ notification_item.description | default('') }}"
+    organization: "{{ notification_item.organization }}"
+    notification_type: "{{ notification_item.type }}"
+    notification_configuration: "{{ notification_item.config }}"
+    state: present
+    controller_host: "{{ CONTROLLER_HOST }}"
+    controller_username: "{{ CONTROLLER_USERNAME }}"
+    controller_password: "{{ CONTROLLER_PASSWORD }}"
+    validate_certs: "{{ CONTROLLER_VERIFY_SSL }}"
+  loop: "{{ controller_notifications_all }}"
+  loop_control:
+    loop_var: notification_item
+  tags:
+    - notifications
+  when: controller_notifications_all is defined

@@ -1,0 +1,256 @@
+# ---- Team Inputs for AWX Config-as-Code ----
+# Minimal knobs a team needs to set
+
+# Environment & org selector
+env: dev
+platform_owner_org: PLATFORM
+config_as_code_org: config_as_code
+
+# (Optional) If you want to pass Controller creds from this file - KEEP THIS IN Vault/{{ env }}.yml
+CONTROLLER_HOST: "http://awx.example.com:32000"
+CONTROLLER_USERNAME: "ansible"
+CONTROLLER_PASSWORD: ""
+CONTROLLER_VERIFY_SSL: false
+gitlab_username: "devenglinux"  # Default GitLab username for config-as-code orgs & platform owner org
+gitlab_password: "" # Default GitLab password for all organizations
+gitlab_password_deveng_linux: "" # GitLab password for deveng-linux user (if different from default)
+email_smtp_username: "******@gmail.com"
+email_smtp_password: "xxxx xxxx xxxx xxxx" # App Password for {{ email_smtp_username }} gmail account
+email_smtp_sender: "******@gmail.com"
+email_smtp_recipient1: "******@gmail.com"
+email_smtp_recipient2: "******@gmail.com"
+# gitlab_pat: glpat-******************** # GitLab Personal Access Token with API scope (if using this instead of username/password)
+
+# -------------------------------
+# Email Notification Template
+# -------------------------------
+controller_notifications_all:
+  - name: "Team Gmail Notification"
+    type: email
+    organization: "{{ platform_owner_org }}"
+    description: "Email alerts for failures via Gmail"
+    config:
+      host: "smtp.gmail.com"
+      port: 587
+      username: "{{ email_smtp_username }}"
+      password: "{{ email_smtp_password }}"
+      sender: "{{ email_smtp_sender }}"
+      recipients:
+        - "{{ email_smtp_recipient1 }}"
+        - "{{ email_smtp_recipient2 }}"
+      use_tls: true
+      use_ssl: false
+
+# -------------------------------
+# Credentials ("{{ cred_type }}"")
+# -------------------------------
+controller_credentials_all:
+  - name: "{{ platform_owner_org }} Gitlab"
+    organization: "{{ platform_owner_org }}"
+    credential_type: "Source Control"
+    inputs:
+      username: "{{ gitlab_username }}"
+      password: "{{ gitlab_password }}" # put this in Ansible Vault
+
+  - name: "{{ config_as_code_org }} Gitlab"
+    organization: "{{ config_as_code_org }}"
+    credential_type: "Source Control"
+    inputs:
+      username: "{{ gitlab_username }}"
+      password: "{{ gitlab_password_deveng_linux }}" # put this in Ansible Vault
+
+# -------------------------------
+# Projects (SCM)
+# -------------------------------
+controller_projects_all:
+  - name: "{{ platform_owner_org }} Project"
+    organization: "{{ platform_owner_org }}"
+    scm_type: git
+    scm_url: "http://gitlab.example.com/infra-team/config_as_code_template.git"
+    scm_branch: "main"
+    credential: "{{ platform_owner_org }} Gitlab"
+    update_project: true
+
+  - name: "{{ config_as_code_org }} Project"
+    organization: "{{ config_as_code_org }}"
+    scm_type: git
+    scm_url: "http://gitlab.example.com/infra-team/config_as_code_template.git"
+    scm_branch: "development"
+    credential: "{{ config_as_code_org }} Gitlab"
+    update_project: true
+
+# -------------------------------
+# Inventories
+# -------------------------------
+controller_inventories_all:
+  - name: "{{ platform_owner_org }} vm Inventory"
+    organization: "{{ platform_owner_org }}"
+    description: "Database inventory for {{ platform_owner_org }} org"
+
+  - name: "{{ config_as_code_org }} lb Inventory"
+    organization: "{{ config_as_code_org }}"
+    description: "Web inventory for {{ config_as_code_org }} org"
+
+# -------------------------------
+# Inventory Sources (SCM sync)
+# -------------------------------
+controller_inventory_sources_all:
+  - name: "{{ platform_owner_org }} Inventory Source (main)"
+    organization: "{{ platform_owner_org }}"
+    inventory: "{{ platform_owner_org }} vm Inventory"
+    source: scm
+    source_project: "{{ platform_owner_org }} Project"
+    source_path: "inventory_vm.yml"        # or inventory_{{ env }}.yml
+    credential: "{{ platform_owner_org }} Gitlab"
+    update_on_project_update: true
+    overwrite: true
+    overwrite_vars: true
+    update_cache_timeout: 0
+    # Optional schedule
+    schedule_name: "Auto Sync every 6hrs {{ platform_owner_org }} vm Inventory"
+    schedule_rrule: "DTSTART;TZID=UTC:20250725T000000 RRULE:FREQ=HOURLY;INTERVAL=6"
+
+  - name: "{{ config_as_code_org }} Inventory Source (dev)"
+    organization: "{{ config_as_code_org }}"
+    inventory: "{{ config_as_code_org }} lb Inventory"
+    source: scm
+    source_project: "{{ config_as_code_org }} Project"
+    source_path: "inventory_lb.yml"        # or inventory_{{ env }}.yml
+    credential: "{{ config_as_code_org }} Gitlab"
+    update_on_project_update: true
+    overwrite: true
+    overwrite_vars: true
+    update_cache_timeout: 0
+    # Optional schedule
+    schedule_name: "Sync config_as_code lb Inventory daily at 2 AM"
+    schedule_rrule: "DTSTART;TZID=UTC:20250725T020000 RRULE:FREQ=DAILY;INTERVAL=1"
+
+# -------------------------------
+# Global Schedules (point at UJT)
+# -------------------------------
+controller_schedules_all:
+  - name: "Auto Sync every 6hrs {{ platform_owner_org }} vm Inventory"
+    description: "Sync {{ platform_owner_org }} vm Inventory every 6 hours"
+    unified_job_template: "{{ platform_owner_org }} Inventory Source (main)"
+    rrule: "DTSTART;TZID=UTC:20250725T000000 RRULE:FREQ=HOURLY;INTERVAL=6"
+
+  - name: "Sync {{ config_as_code_org }} lb Inventory daily at 2 AM"
+    description: "Sync {{ config_as_code_org }} lb Inventory daily at 2 AM"
+    unified_job_template: "{{ config_as_code_org }} Inventory Source (dev)"
+    rrule: "DTSTART;TZID=UTC:20250725T020000 RRULE:FREQ=DAILY;INTERVAL=1"
+
+# -------------------------------
+# Job Templates
+# -------------------------------
+controller_job_templates_all:
+  - name: "{{ platform_owner_org }} VM Deploy"
+    description: "Deploy VM"
+    project: "{{ platform_owner_org }} Project"
+    job_type: "run"
+    playbook: "playbooks/controller_config.yml"
+    inventory: "{{ platform_owner_org }} vm Inventory"
+    execution_environment: "AWX EE (latest)"
+    concurrent_jobs_enabled: false
+    ask_variables_on_launch: false
+    ask_inventory_on_launch: false
+    ask_scm_branch_on_launch: false
+    limit: "{{ env }}"
+    verbosity: 1
+    extra_vars:
+      env: "{{ env }}"
+
+  - name: "{{ config_as_code_org }} vm Deploy"
+    description: "Deploy vm"
+    project: "{{ config_as_code_org }}e Project"
+    playbook: "playbooks/controller_config.yml"
+    inventory: "{{ config_as_code_org }} lb Inventory"
+    execution_environment: "AWX EE (latest)"
+    extra_vars:
+      env: "{{ env }}"
+
+  - name: "{{ config_as_code_org }} LB Backup"
+    description: "LB Backup"
+    project: "{{ config_as_code_org }} Project"
+    job_type: "run"
+    playbook: "playbooks/controller_config.yml"
+    inventory: "{{ config_as_code_org }} lb Inventory"
+    execution_environment: "AWX EE (latest)"
+    concurrent_jobs_enabled: false
+    ask_variables_on_launch: false
+    ask_inventory_on_launch: false
+    ask_scm_branch_on_launch: false
+    limit: "{{ env }}"
+    verbosity: 1
+    extra_vars:
+      env: "{{ env }}"
+
+# -------------------------------
+# Workflow Job Templates
+# -------------------------------
+controller_workflow_job_templates_all:
+  # PLATFORM workflow
+  - name: "{{ platform_owner_org }} Workflow"
+    description: "A workflow for {{ platform_owner_org }} org"
+    organization: "{{ platform_owner_org }}"
+    inventory: "{{ platform_owner_org }} vm Inventory"
+    limit: "{{ env }}"
+    scm_branch: "main"
+    labels: ["{{ platform_owner_org }}"]
+    ask_variables_on_launch: false
+    notification_templates_error:     # attach alert for runtime failures
+      - "Team Gmail Notification"
+    nodes:
+      - identifier: "{{ platform_owner_org }} VM Deploy node"
+        unified_job_template: "{{ platform_owner_org }} VM Deploy"
+        success_nodes: []
+
+  # config_as_code workflow (with sub-workflow + approval + syncs)
+  - name: "{{ config_as_code_org }} Workflow"
+    description: "A workflow for {{ config_as_code_org }} org"
+    organization: "{{ config_as_code_org }}"
+    inventory: "{{ config_as_code_org }} lb Inventory"
+    limit: "{{ env }}"
+    scm_branch: "main"
+    labels: ["{{ config_as_code_org }}"]
+    ask_variables_on_launch: false
+    notification_templates_error:     # attach alert for runtime failures
+      - "Team Gmail Notification"
+    nodes:
+      # 1) backup
+      - identifier: "{{ config_as_code_org }} LB Backup node"
+        unified_job_template: "{{ config_as_code_org }} LB Backup"
+        success_nodes: ["{{ config_as_code_org }} vm Deploy node"]
+        failure_nodes: ["call_platform_workflow"]
+
+      # 2) deploy (also reached after sub-workflow success)
+      - identifier: "{{ config_as_code_org }} vm Deploy node"
+        unified_job_template: "{{ config_as_code_org }} vm Deploy"
+        success_nodes: []
+
+      # 3) failure handler → sub-workflow
+      - identifier: "call_platform_workflow"
+        unified_job_template: "{{ platform_owner_org }} Workflow"
+        success_nodes: ["{{ config_as_code_org }} vm Deploy node"]
+        failure_nodes: ["approval_before_inventory_sync"]
+
+      # 4) approval before inventory sync
+      - identifier: "approval_before_inventory_sync"
+        approval_node:
+          name: "Approval: Run {{ platform_owner_org }} Inventory Sync"
+          description: "Approve to run {{ platform_owner_org }} vm Inventory sync"
+          timeout: 3600
+        success_nodes: ["platform_inventory_sync"]
+
+      # 5) inventory source sync
+      - identifier: "platform_inventory_sync"
+        unified_job_template: "{{ platform_owner_org }} Inventory Source (main)"
+        all_parents_must_converge: true
+        success_nodes: ["platform_project_sync"]
+        # NOTE: 'always_nodes' will run even if sync fails.
+        # If you DON'T want deploy on failure, remove the next line.
+        always_nodes: ["{{ config_as_code_org }} vm Deploy node"]
+
+      # 6) project sync
+      - identifier: "platform_project_sync"
+        unified_job_template: "{{ platform_owner_org }} Project"
+        success_nodes: ["{{ config_as_code_org }} vm Deploy node"]
